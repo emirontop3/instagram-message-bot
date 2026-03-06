@@ -1,10 +1,10 @@
 from http.server import BaseHTTPRequestHandler
 from instagrapi import Client
 import json
+import random
 
-# --- SABİT KİMLİK BİLGİLERİ ---
+# --- GÜNCEL KİMLİK BİLGİLERİ ---
 SESSION_ID = "43262476750%3ABX3ZPbvspHcVxX%3A6%3AAYhB0Y3fFOdX-lvumGG2EAvJFBdk3_ezWNYUbDzqhg"
-USER_AGENT = "Instagram 269.1.0.18.231 Android (33/13.0; 450dpi; 1080x2340; samsung; SM-S911B; galaxy s23; qcom; en_US; 443213142)"
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -21,37 +21,47 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(post_data)
             
             target = data.get('target', '').replace('@', '').strip()
-            message_text = data.get('message', 'Selam! Bu otomatik bir mesajdır.') # Panelden mesaj gelmezse bu gider
+            message_text = data.get('message', 'Selam!')
 
             cl = Client()
-            cl.request_timeout = 9 # Vercel limitine yakın ama güvenli
+            cl.request_timeout = 10
             
-            # Instagram'ı kandırma katmanı
-            cl.set_user_agent(USER_AGENT)
+            # INSTAGRAM'I KANDIRAN TARAYICI BAŞLIKLARI (SENİN VERDİĞİN YAPI)
+            cl.set_user_agent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36')
             
-            # SIZMA OPERASYONU
+            # Ekstra Güvenlik Başlıkları
+            headers = {
+                "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
+                "X-IG-App-ID": "936619743392459", # Gerçek Instagram Web App ID
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": "https://www.instagram.com/",
+                "Origin": "https://www.instagram.com"
+            }
+            cl.direct.headers.update(headers)
+
+            # SIZMA VE GİRİŞ
             cl.login_by_sessionid(SESSION_ID)
             
-            # 1. ADIM: Hedef Kullanıcıyı Bul
+            # Hız Sınırına Takılmamak İçin Hafif Rastgele Bekleme
+            import time
+            time.sleep(random.uniform(1, 3))
+
+            # OPERASYON
             user_id = cl.user_id_from_username(target)
-            
-            # 2. ADIM: Takip Et
             cl.user_follow(user_id)
-            
-            # 3. ADIM: Mesaj Gönder (DM)
-            # İstersen buraya küçük bir bekleme ekleyebilirsin: import time; time.sleep(1)
             cl.direct_send(message_text, [user_id])
             
-            res_msg = f"@{target} takibe alındı ve mesaj gönderildi!"
-            self._send_response(200, {"status": "success", "message": res_msg})
+            self._send_response(200, {"status": "success", "message": f"@{target} tamamlandı!"})
 
         except Exception as e:
-            # Hata detayını temizle ve gönder
-            error_detail = str(e)
-            if "Expecting value" in error_detail:
-                error_detail = "Instagram bağlantıyı kesti (IP Engeli). Lütfen 5 dk sonra tekrar dene."
-            
-            self._send_response(500, {"status": "error", "message": f"Hata: {error_detail}"})
+            error_str = str(e)
+            # Eğer IP engeli varsa veya boş dönüyorsa
+            if "Expecting value" in error_str or "403" in error_str:
+                self._send_response(429, {"status": "error", "message": "IP Limitine takıldık. Vercel projesini başka bir isimle tekrar açın (IP Değişimi için)."})
+            else:
+                self._send_response(500, {"status": "error", "message": f"Hata: {error_str}"})
 
     def _send_response(self, status, data):
         self.send_response(status)
